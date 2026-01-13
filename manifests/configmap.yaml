@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-observer-config
+  namespace: default
+data:
+  CLUSTER_NAME: "production"
+  SLACK_CHANNEL: "#k8s-alerts"
+  NAMESPACES_EXCLUDE: "kube-system,kube-public,kube-node-lease"
+  SNAPSHOT_INTERVAL: "3h"
+  REPORT_DAY: "monday"
+  REPORT_TIME: "09:00"
+  RETENTION_WEEKS: "2"
+  LOG_LEVEL: "info"
+  DATABASE_PATH: "/data/k8s-observer.db"
