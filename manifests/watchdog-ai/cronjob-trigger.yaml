@@ -1,0 +1,76 @@
+---
+# CronJob to trigger weekly reports by calling the /report endpoint
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k8s-watchdog-trigger
+  namespace: observability
+  labels:
+    app: k8s-watchdog-ai
+    component: trigger
+spec:
+  # Schedule: Every Monday at 09:00 UTC
+  schedule: "0 9 * * 1"
+  
+  # Keep last 3 successful and 1 failed job
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  
+  # Don't allow concurrent runs
+  concurrencyPolicy: Forbid
+  
+  jobTemplate:
+    metadata:
+      labels:
+        app: k8s-watchdog-ai
+        component: trigger-job
+    spec:
+      # Clean up job after 1 hour
+      ttlSecondsAfterFinished: 3600
+      
+      template:
+        metadata:
+          labels:
+            app: k8s-watchdog-ai
+            component: trigger-pod
+        spec:
+          restartPolicy: OnFailure
+          
+          containers:
+          - name: trigger
+            image: curlimages/curl:8.5.0
+            
+            command:
+            - sh
+            - -c
+            - |
+              echo "Triggering weekly report at $(date)"
+              
+              # Call the /report endpoint
+              response=$(curl -s -w "\n%{http_code}" \
+                -X POST \
+                -H "Content-Type: application/json" \
+                http://k8s-watchdog-ai.observability.svc.cluster.local:8000/report)
+              
+              http_code=$(echo "$response" | tail -n 1)
+              body=$(echo "$response" | head -n -1)
+              
+              echo "HTTP Status: $http_code"
+              echo "Response: $body"
+              
+              # Check if successful (200 or 202)
+              if [ "$http_code" = "200" ] || [ "$http_code" = "202" ]; then
+                echo "✅ Report generation triggered successfully"
+                exit 0
+              else
+                echo "❌ Failed to trigger report"
+                exit 1
+              fi
+            
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                cpu: 50m
+                memory: 32Mi

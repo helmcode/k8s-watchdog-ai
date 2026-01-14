@@ -1,263 +1,259 @@
-# K8s Observer 🔍
+# K8s Watchdog AI 🐕
 
-**Autonomous Kubernetes cluster monitoring with AI-powered insights**
+> Autonomous Kubernetes cluster observability with AI-powered weekly health reports
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://go.dev/)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.19+-326CE5?logo=kubernetes)](https://kubernetes.io/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
 
-K8s Observer is a lightweight Go application that runs inside your Kubernetes cluster to continuously monitor cluster health and deliver AI-analyzed reports directly to Slack.
+An intelligent Kubernetes monitoring agent that uses Claude AI to autonomously investigate cluster health, analyze metrics from Prometheus, and generate comprehensive weekly PDF reports delivered via Slack.
 
 ## ✨ Features
 
-- 🤖 **AI-Powered Analysis**: Uses Claude (Anthropic) to analyze cluster health and provide actionable insights
-- 📊 **Automated Monitoring**: Collects cluster snapshots every 3 hours
-- 📄 **Beautiful PDF Reports**: Generates styled HTML-based PDF reports with your brand colors
-- 💬 **Slack Integration**: Sends weekly reports directly to your Slack channels
-- 🗄️ **Zero Dependencies**: Uses embedded SQLite for data storage
-- 🔒 **Secure**: Read-only RBAC permissions, runs as non-root
-- 🌍 **Multi-language**: Generate reports in any language (English, Spanish, French, etc.)
-- ⚙️ **Configurable**: Customize via environment variables
+- 🤖 **AI-Powered Analysis**: Claude AI autonomously investigates cluster issues using direct Python tools
+- 📊 **Prometheus Integration**: Analyzes metrics to detect resource inefficiencies (optional)
+- 🔒 **Read-Only by Design**: All operations are read-only for safety
+- 📄 **PDF Reports**: Professional HTML reports converted to PDF via WeasyPrint
+- 📧 **Slack Integration**: Reports delivered via Slack with detailed tool usage information
+- 🗄️ **Historical Tracking**: SQLite storage for report history
+- 🚀 **REST API**: FastAPI server for on-demand report generation
+- ⚡ **Graceful Degradation**: Works with or without Prometheus
 
-## 🎯 What It Does
+## 🏗️ Architecture
 
-K8s Observer monitors your Kubernetes cluster and generates concise weekly reports with:
-
-1. **Executive Summary**: Quick health status (🟢 Green / 🟡 Yellow / 🔴 Red) and key metrics
-2. **Main Issues**: Top 3-5 critical problems with severity, impact, and recommended actions
-3. **Resource Optimization**: Identifies over-provisioned and at-risk workloads with cost-saving opportunities
-4. **Action Plan**: Prioritized checklist of immediate actions to improve cluster health
+```
+┌─────────────────────────────────────────────────────┐
+│              Kubernetes Cluster                      │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │       K8s Watchdog AI (FastAPI)              │   │
+│  │                                              │   │
+│  │  ┌────────────────────────────────────┐     │   │
+│  │  │  Claude AI Agent                   │     │   │
+│  │  │  - Autonomous investigation        │     │   │
+│  │  │  - Tool selection & execution      │     │   │
+│  │  │  - Report generation              │     │   │
+│  │  └─────────┬──────────────────────────┘     │   │
+│  │            │                                 │   │
+│  │  ┌─────────▼──────────┐  ┌────────────────┐│   │
+│  │  │ Kubernetes Tools   │  │ Prometheus     ││   │
+│  │  │ - get pods/nodes   │  │ Tools          ││   │
+│  │  │ - describe         │  │ - query        ││   │
+│  │  │ - logs             │  │ - range query  ││   │
+│  │  │ - events           │  │ - memory/cpu   ││   │
+│  │  └────────────────────┘  └────────────────┘│   │
+│  │                                              │   │
+│  │  ┌────────────────────────────────────┐     │   │
+│  │  │  Report Generator & Storage        │     │   │
+│  │  │  - WeasyPrint (HTML → PDF)         │     │   │
+│  │  │  - SQLite (history)                │     │   │
+│  │  │  - Slack Files API v2              │     │   │
+│  │  └────────────────────────────────────┘     │   │
+│  └──────────────────┬───────────────────────────┘   │
+└────────────────────┼─────────────────────────────────┘
+                     │
+                     ▼
+              Slack Webhook
+```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Kubernetes cluster (1.19+)
-- [Anthropic API key](https://console.anthropic.com/) (for Claude AI)
-- [Slack App](https://api.slack.com/apps) with:
-  - Incoming webhook URL
-  - Bot token with `chat:write`, `files:write`, and `channels:read` scopes
+- Kubernetes cluster with kubectl access (or kubeconfig for local development)
+- Anthropic API key ([Get one here](https://console.anthropic.com/))
+- Slack webhook URL ([Create one](https://api.slack.com/messaging/webhooks))
+- Slack Bot Token and Channel ID for file uploads ([Create bot](https://api.slack.com/apps))
+- Prometheus running in cluster (optional - reports work without it)
 
-### Installation
-
-1. **Clone the repository:**
+### Local Development with Docker Compose
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/helmcode/k8s-watchdog-ai.git
 cd k8s-watchdog-ai
+
+# 2. Copy and configure environment
+cp .env.example .env
+# Edit .env with your API keys and settings
+
+# 3. Run with docker-compose
+docker-compose up -d
+
+# 4. Trigger report generation
+curl -X POST http://localhost:8000/report
+
+# 5. Check status
+curl http://localhost:8000/health
+
+# 6. View logs
+docker-compose logs -f
 ```
 
-2. **Configure secrets:**
-
-Edit `manifests/secret.yaml` with your credentials:
-
-```yaml
-stringData:
-  anthropic-api-key: "sk-ant-..."
-  slack-webhook-url: "https://hooks.slack.com/services/..."
-  slack-bot-token: "xoxb-..."
-```
-
-3. **Configure settings:**
-
-Edit `manifests/configmap.yaml`:
-
-```yaml
-data:
-  CLUSTER_NAME: "production"
-  SLACK_CHANNEL: "C012AB3CDE4"  # Get from Slack channel URL
-  REPORT_LANGUAGE: "english"    # or spanish, french, etc.
-  REPORT_DAY: "monday"
-  REPORT_TIME: "09:00"
-```
-
-4. **Deploy:**
+### Deploy to Kubernetes
 
 ```bash
-kubectl apply -f manifests/
+# 1. Create namespace
+kubectl create namespace observability
+
+# 2. Configure secrets
+kubectl create secret generic k8s-watchdog-secrets \
+  --from-literal=anthropic-api-key=sk-ant-... \
+  --from-literal=slack-webhook-url=https://hooks.slack.com/... \
+  --from-literal=slack-bot-token=xoxb-... \
+  --from-literal=slack-channel=C123456789 \
+  -n observability
+
+# 3. Deploy the agent
+kubectl apply -f manifests/watchdog-ai/
+
+# 5. Verify deployment
+kubectl get pods -n observability
+kubectl logs -f deployment/k8s-watchdog-ai -n observability
 ```
 
-5. **Verify:**
-
-```bash
-kubectl get pods -l app=k8s-observer
-kubectl logs -l app=k8s-observer -f
-```
-
-## 📋 Configuration
-
-### Essential Environment Variables
+## ⚙️ Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | ✅ | - | Your Claude API key |
-| `SLACK_WEBHOOK_URL` | ✅ | - | Slack incoming webhook |
-| `SLACK_BOT_TOKEN` | ✅ | - | Slack bot token (`xoxb-...`) |
-| `SLACK_CHANNEL` | ✅ | - | Channel ID (e.g., `C012AB3CDE4`) |
-| `ANTHROPIC_MODEL` | ❌ | `claude-3-5-haiku-20241022` | Claude model to use |
-| `REPORT_LANGUAGE` | ❌ | `english` | Report language |
-| `CLUSTER_NAME` | ❌ | `default` | Cluster identifier |
-| `SNAPSHOT_INTERVAL` | ❌ | `3h` | Collection frequency |
-| `REPORT_DAY` | ❌ | `monday` | Weekly report day |
-| `REPORT_TIME` | ❌ | `09:00` | Report time (24h) |
+| `ANTHROPIC_API_KEY` | ✅ | - | Claude API key |
+| `ANTHROPIC_MODEL` | ❌ | claude-sonnet-4-20250514 | AI model to use |
+| `SLACK_WEBHOOK_URL` | ✅ | - | Slack webhook for messages |
+| `SLACK_BOT_TOKEN` | ✅ | - | Bot token for file uploads |
+| `SLACK_CHANNEL` | ✅ | - | Channel ID (e.g., C123456789) |
+| `PROMETHEUS_URL` | ❌ | http://prometheus:9090 | Prometheus server URL |
+| `CLUSTER_NAME` | ❌ | default | Cluster identifier |
+| `EXCLUDED_NAMESPACES` | ❌ | kube-system,kube-public,... | Namespaces to exclude |
+| `REPORT_LANGUAGE` | ❌ | spanish | Report language (spanish/english) |
+| `SQLITE_PATH` | ❌ | /app/data/reports.db | SQLite database path |
+| `LOG_LEVEL` | ❌ | INFO | Logging level |
 
-### Available Claude Models
+See [.env.example](.env.example) for complete list.
 
-- `claude-3-5-haiku-20241022` - Fast and cost-effective (recommended)
-- `claude-3-5-sonnet-20241022` - Balanced performance
-- `claude-sonnet-4-20250514` - Most capable
+## 📋 How It Works
 
-See [`.env.example`](.env.example) for all configuration options.
+1. **FastAPI Server**: Runs continuously, exposing `/report` and `/health` endpoints
+2. **Trigger**: Can be called via HTTP POST or scheduled with Kubernetes CronJob
+3. **AI Investigation**: 
+   - Claude receives a system prompt with available tools
+   - Agent autonomously decides what to investigate
+   - Makes iterative queries to Kubernetes and Prometheus (if available)
+4. **Analysis**: AI analyzes cluster health, resource usage, and metrics
+5. **Report Generation**: Creates HTML report, converts to PDF with WeasyPrint
+6. **Delivery**: Uploads PDF to Slack with detailed tool usage information
+7. **Storage**: Saves report to SQLite for history tracking
 
-## 🏗️ Architecture
+### Example AI Investigation Flow
 
 ```
-┌─────────────────────────────────────────────┐
-│            k8s-observer pod                  │
-│                                              │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
-│  │Collector │─▶│ Analyzer │─▶│ Reporter  │  │
-│  │(3h cron) │  │ (Claude) │  │ (Slack)   │  │
-│  └──────────┘  └──────────┘  └───────────┘  │
-│       │              ▲                       │
-│       ▼              │                       │
-│  ┌──────────────────────────────────────┐   │
-│  │            SQLite Storage             │   │
-│  └──────────────────────────────────────┘   │
-└─────────────────────────────────────────────┘
-        │
-        ▼
-   K8s API (read-only)
+Claude: "Let me check the overall pod status"
+→ Calls: kubectl_get_pods(namespace="default", all_namespaces=True)
+
+Claude: "I see pod X has 15 restarts. Let me investigate"
+→ Calls: kubectl_describe_pod(pod="X", namespace="production")
+→ Calls: kubectl_get_pod_logs(pod="X", namespace="production", tail=100)
+
+Claude: "This looks like OOMKilled. Let me check memory metrics"
+→ Calls: prometheus_check_pod_memory(pod="X", namespace="production")
+→ Calls: prometheus_query(query="container_memory_working_set_bytes{pod='X'}")
+
+Claude: "Memory usage is consistently above request. Recommending increase"
+→ Generates HTML report with specific recommendations
+→ Report includes: issue analysis, metrics charts, action plan
 ```
+
+### Tool Availability Detection
+
+The system intelligently handles tool availability:
+
+```
+✅ Kubernetes API: 5 tool types used
+   • Tools: kubectl_describe_pod, kubectl_get_deployments, kubectl_get_events, ...
+
+❌ Prometheus: Connection failed
+   • Prometheus not available: All connection attempts failed
+   
+   ℹ️ Report generated using Kubernetes data only
+```
+
+## 📊 Report Structure
+
+Reports include:
+
+1. **Executive Summary**: Overall health status (🟢🟡🔴)
+2. **Top Issues**: 3-5 critical problems with severity levels
+3. **Resource Analysis**: Over/under-provisioned workloads
+4. **Prometheus Metrics**: CPU, memory, disk usage (when available)
+5. **Action Plan**: Prioritized, actionable recommendations
+6. **Footer**: Generated by Watchdog AI - Helmcode
+
+The PDF report is accompanied by a Slack message showing:
+- Report generation time
+- Data sources used (Kubernetes API, Prometheus)
+- Tool usage statistics
+- Connection status for each service
 
 ## 🛠️ Development
 
-### Local Development
-
 ```bash
-# Copy environment template
-cp .env.example .env
+# Install dependencies
+pip install -e ".[dev]"
 
-# Edit .env with your credentials
-nano .env
+# Run locally (requires kubeconfig)
+python -m src.main
 
-# Build
-go build -o bin/observer ./cmd/observer
+# Format code
+black src/
+ruff check src/
 
-# Run normally (continuous monitoring)
-source .env && ./bin/observer
+# Type check
+mypy src/
 
-# Or run in test mode (one-time report)
-source .env && ./bin/observer --test-report
+# Build Docker image
+docker build -t k8s-watchdog-ai:latest .
 ```
 
-### Test Mode
+## 🔐 Security
 
-The `--test-report` flag is perfect for testing:
-- Generates a report immediately
-- Sends to Slack
-- Exits after completion
-- No need to wait for weekly schedule
+- **Read-only access**: All operations are read-only (get, list, watch, describe, logs)
+- **RBAC**: Minimal permissions required in Kubernetes
+- **No cluster modifications**: Agent cannot modify cluster state
+- **Secrets management**: Kubernetes secrets for sensitive data
+- **Connection errors**: Gracefully handles unavailable services
 
-### Build Docker Image
+## 📚 API Endpoints
 
-```bash
-docker build -t your-registry/k8s-observer:latest .
-docker push your-registry/k8s-observer:latest
-```
+- `POST /report` - Generate and send report immediately (returns 202 Accepted)
+- `GET /health` - Health check endpoint
+- `GET /stats` - Report generation statistics
 
-### Testing with Local Cluster
+## 📚 Documentation
 
-```bash
-# Create kind cluster
-kind create cluster
-
-# Install metrics-server (optional but recommended)
-kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-
-# For kind, patch metrics-server
-kubectl patch -n kube-system deployment metrics-server --type=json \
-  -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
-
-# Deploy k8s-observer
-kubectl apply -f manifests/
-```
-
-## 📊 Data Collected
-
-Each snapshot includes:
-
-- **Pods**: Status, restarts, restart reasons, resource requests/limits/actual usage
-- **Nodes**: Capacity, allocatable resources, conditions
-- **Events**: Warnings and errors from the cluster
-
-## 🔒 Security
-
-- ✅ Read-only ClusterRole (no write access)
-- ✅ Runs as non-root user (UID 1000)
-- ✅ Secrets stored in Kubernetes Secrets
-- ✅ Persistent storage for database
-
-## 🐛 Troubleshooting
-
-### Pod not starting?
-
-```bash
-kubectl logs -l app=k8s-observer
-```
-
-Common issues:
-- Missing API keys in secrets
-- Invalid Slack channel ID (must be channel ID, not name)
-- Metrics Server not installed (optional)
-
-### No metrics data?
-
-Verify Metrics Server:
-
-```bash
-kubectl get deployment metrics-server -n kube-system
-kubectl top nodes
-```
-
-### Reports not sent?
-
-Check logs:
-
-```bash
-kubectl logs -l app=k8s-observer | grep -i "report\|slack"
-```
-
-Verify:
-- Slack webhook URL is correct
-- Bot token has required scopes
-- Channel ID is correct (starts with `C`, not `#channel-name`)
+- [CLAUDE.md](CLAUDE.md) - Detailed technical documentation for AI assistants
+- [Architecture Overview](#architecture) - System design
+- [API Documentation](#api-endpoints) - REST endpoints
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please:
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 
-- Powered by [Anthropic Claude](https://www.anthropic.com/) for AI analysis
-- Built with ❤️ by the [HelmCloud](https://github.com/helmcode) team
-
-## 🔗 Links
-
-- [Documentation](https://github.com/helmcode/k8s-watchdog-ai/wiki)
-- [Report Issues](https://github.com/helmcode/k8s-watchdog-ai/issues)
-- [HelmCloud](https://helmcode.com)
+- [Anthropic Claude](https://www.anthropic.com/claude) - AI engine
+- [FastAPI](https://fastapi.tiangolo.com/) - Web framework
+- [WeasyPrint](https://weasyprint.org/) - PDF generation
+- [Kubernetes Python Client](https://github.com/kubernetes-client/python) - K8s integration
 
 ---
 
-Made with ❤️ by [HelmCloud](https://github.com/helmcode)
+**Made with ❤️ by [Helmcode](https://helmcode.com)**
