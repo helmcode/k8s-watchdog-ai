@@ -1,5 +1,3 @@
-"""Prometheus tools for Claude AI agent."""
-
 import json
 from typing import Any
 import httpx
@@ -10,19 +8,19 @@ logger = structlog.get_logger()
 
 class PrometheusTools:
     """Prometheus interaction tools for AI agent."""
-    
+
     def __init__(self, prometheus_url: str):
         """Initialize Prometheus client.
-        
+
         Args:
             prometheus_url: Base URL of Prometheus server
         """
         self.prometheus_url = prometheus_url.rstrip("/")
         logger.info("prometheus_tools_initialized", url=self.prometheus_url)
-    
+
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """Get Anthropic tool definitions for Prometheus operations.
-        
+
         Returns:
             List of tool definitions
         """
@@ -100,14 +98,14 @@ class PrometheusTools:
                 }
             }
         ]
-    
+
     async def execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Execute a Prometheus tool.
-        
+
         Args:
             tool_name: Name of tool to execute
             arguments: Tool arguments
-            
+
         Returns:
             Tool result as string
         """
@@ -138,7 +136,7 @@ class PrometheusTools:
         except Exception as e:
             logger.error("prometheus_tool_error", tool=tool_name, error=str(e))
             return f"Error: {str(e)}"
-    
+
     async def _query(self, query: str) -> str:
         """Execute instant query."""
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -149,14 +147,14 @@ class PrometheusTools:
                 )
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if data["status"] != "success":
                     return f"Query failed: {data.get('error', 'unknown error')}"
-                
+
                 result = data["data"]["result"]
                 if not result:
                     return "No data returned"
-                
+
                 # Format results
                 formatted = []
                 for item in result:
@@ -166,23 +164,23 @@ class PrometheusTools:
                         "metric": metric,
                         "value": value
                     })
-                
+
                 return json.dumps(formatted, indent=2)
             except httpx.ConnectError as e:
                 # Propagate connection errors so they're tracked as failures
                 raise RuntimeError(f"Prometheus not available: {str(e)}")
             except httpx.HTTPError as e:
                 return f"HTTP error: {str(e)}"
-    
+
     async def _query_range(self, query: str, duration: str, step: str) -> str:
         """Execute range query."""
         import time
-        
+
         # Parse duration to seconds
         duration_seconds = self._parse_duration(duration)
         end_time = int(time.time())
         start_time = end_time - duration_seconds
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.get(
@@ -196,20 +194,20 @@ class PrometheusTools:
                 )
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if data["status"] != "success":
                     return f"Query failed: {data.get('error', 'unknown error')}"
-                
+
                 result = data["data"]["result"]
                 if not result:
                     return "No data returned"
-                
+
                 # Simplify output - show min/max/avg for each metric
                 formatted = []
                 for item in result:
                     metric = item["metric"]
                     values = [float(v[1]) for v in item["values"]]
-                    
+
                     if values:
                         formatted.append({
                             "metric": metric,
@@ -219,13 +217,13 @@ class PrometheusTools:
                             "current": values[-1],
                             "samples": len(values)
                         })
-                
+
                 return json.dumps(formatted, indent=2)
             except httpx.ConnectError as e:
                 raise RuntimeError(f"Prometheus not available: {str(e)}")
             except httpx.HTTPError as e:
                 return f"HTTP error: {str(e)}"
-    
+
     async def _check_pod_memory(self, pod: str, namespace: str) -> str:
         """Check memory usage vs limits."""
         try:
@@ -234,7 +232,7 @@ class PrometheusTools:
                 "limit": f'kube_pod_container_resource_limits{{pod="{pod}", namespace="{namespace}", resource="memory"}}',
                 "request": f'kube_pod_container_resource_requests{{pod="{pod}", namespace="{namespace}", resource="memory"}}'
             }
-            
+
             results = {}
             async with httpx.AsyncClient(timeout=30.0) as client:
                 for name, query in queries.items():
@@ -245,7 +243,7 @@ class PrometheusTools:
                         )
                         response.raise_for_status()
                         data = response.json()
-                        
+
                         if data["status"] == "success" and data["data"]["result"]:
                             value = float(data["data"]["result"][0]["value"][1])
                             results[name] = value
@@ -253,7 +251,7 @@ class PrometheusTools:
                         raise
                     except Exception as e:
                         results[name] = f"Error: {str(e)}"
-            
+
             # Calculate percentages
             analysis = {
                 "pod": pod,
@@ -262,14 +260,14 @@ class PrometheusTools:
                 "limit_bytes": results.get("limit", "N/A"),
                 "request_bytes": results.get("request", "N/A")
             }
-            
+
             if isinstance(results.get("usage"), (int, float)) and isinstance(results.get("limit"), (int, float)):
                 analysis["usage_vs_limit_pct"] = (results["usage"] / results["limit"]) * 100
-            
+
             return json.dumps(analysis, indent=2)
         except httpx.ConnectError as e:
             raise RuntimeError(f"Prometheus not available: {str(e)}")
-    
+
     async def _check_pod_cpu(self, pod: str, namespace: str) -> str:
         """Check CPU usage vs limits."""
         try:
@@ -278,7 +276,7 @@ class PrometheusTools:
                 "limit": f'kube_pod_container_resource_limits{{pod="{pod}", namespace="{namespace}", resource="cpu"}}',
                 "request": f'kube_pod_container_resource_requests{{pod="{pod}", namespace="{namespace}", resource="cpu"}}'
             }
-            
+
             results = {}
             async with httpx.AsyncClient(timeout=30.0) as client:
                 for name, query in queries.items():
@@ -289,7 +287,7 @@ class PrometheusTools:
                         )
                         response.raise_for_status()
                         data = response.json()
-                        
+
                         if data["status"] == "success" and data["data"]["result"]:
                             value = float(data["data"]["result"][0]["value"][1])
                             results[name] = value
@@ -297,7 +295,7 @@ class PrometheusTools:
                         raise  # Propagate connection errors
                     except Exception as e:
                         results[name] = f"Error: {str(e)}"
-            
+
             analysis = {
                 "pod": pod,
                 "namespace": namespace,
@@ -305,32 +303,32 @@ class PrometheusTools:
                 "limit_cores": results.get("limit", "N/A"),
                 "request_cores": results.get("request", "N/A")
             }
-            
+
             if isinstance(results.get("usage"), (int, float)) and isinstance(results.get("limit"), (int, float)):
                 analysis["usage_vs_limit_pct"] = (results["usage"] / results["limit"]) * 100
-            
+
             return json.dumps(analysis, indent=2)
         except httpx.ConnectError as e:
             raise RuntimeError(f"Prometheus not available: {str(e)}")
-    
+
     @staticmethod
     def _parse_duration(duration: str) -> int:
         """Parse duration string to seconds.
-        
+
         Args:
             duration: Duration string (e.g., '1h', '24h', '7d')
-            
+
         Returns:
             Duration in seconds
         """
         unit = duration[-1]
         value = int(duration[:-1])
-        
+
         multipliers = {
             's': 1,
             'm': 60,
             'h': 3600,
             'd': 86400
         }
-        
+
         return value * multipliers.get(unit, 3600)  # Default to hours

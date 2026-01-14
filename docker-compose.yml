@@ -7,27 +7,27 @@ services:
       # Anthropic Configuration
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ANTHROPIC_MODEL=claude-haiku-4-5-20251001
-      
+
       # MCP Configuration
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://host.docker.internal:9090}
       - KUBECONFIG_PATH=/root/.kube/config
-      
+
       # Cluster Configuration
       - CLUSTER_NAME=production
       - NAMESPACES_EXCLUDE=kube-system,kube-public,kube-node-lease
-      
+
       # Report Configuration
       - REPORT_LANGUAGE=spanish
-      
+
       # Slack Configuration
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
       - SLACK_CHANNEL=${SLACK_CHANNEL:-}
-      
+
       # Storage
       - DATA_DIR=/app/data
       - RETENTION_WEEKS=2
-      
+
       # Logging
       - LOG_LEVEL=INFO
     volumes:

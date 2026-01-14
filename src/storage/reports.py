@@ -1,5 +1,3 @@
-"""SQLite storage for report history."""
-
 import aiosqlite
 import structlog
 from datetime import datetime, timedelta
@@ -13,18 +11,18 @@ logger = structlog.get_logger()
 
 class ReportStorage:
     """Manages report storage in SQLite database."""
-    
+
     def __init__(self, db_path: Optional[str] = None) -> None:
         """Initialize report storage.
-        
+
         Args:
             db_path: Path to SQLite database file. Uses settings if not provided.
         """
         self.db_path = db_path or settings.sqlite_path
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         logger.info("report_storage_initialized", db_path=self.db_path)
-    
+
     async def initialize(self) -> None:
         """Initialize database schema."""
         async with aiosqlite.connect(self.db_path) as db:
@@ -38,22 +36,22 @@ class ReportStorage:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
+
             await db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_reports_cluster_generated 
                 ON reports(cluster_name, generated_at DESC)
             """)
-            
+
             await db.commit()
-        
+
         logger.info("database_initialized")
-    
+
     async def save_report(self, html_content: str) -> int:
         """Save a generated report.
-        
+
         Args:
             html_content: HTML report content
-            
+
         Returns:
             Report ID
         """
@@ -72,19 +70,19 @@ class ReportStorage:
             )
             await db.commit()
             report_id = cursor.lastrowid
-        
+
         logger.info(
             "report_saved",
             report_id=report_id,
             size=len(html_content),
             cluster=settings.cluster_name,
         )
-        
+
         return report_id
-    
+
     async def get_latest_report(self) -> Optional[dict]:
         """Get the most recent report for the cluster.
-        
+
         Returns:
             Report dict or None if no reports exist
         """
@@ -103,17 +101,17 @@ class ReportStorage:
                 row = await cursor.fetchone()
                 if row:
                     return dict(row)
-        
+
         return None
-    
+
     async def cleanup_old_reports(self) -> int:
         """Remove reports older than retention period.
-        
+
         Returns:
             Number of reports deleted
         """
         cutoff_date = datetime.now() - timedelta(weeks=settings.retention_weeks)
-        
+
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(
                 """
@@ -124,25 +122,25 @@ class ReportStorage:
             )
             await db.commit()
             deleted_count = cursor.rowcount
-        
+
         logger.info(
             "old_reports_cleaned",
             deleted_count=deleted_count,
             cutoff_date=cutoff_date.isoformat(),
         )
-        
+
         return deleted_count
-    
+
     async def get_report_stats(self) -> dict:
         """Get statistics about stored reports.
-        
+
         Returns:
             Dict with report statistics
         """
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) as total_reports,
                     SUM(report_size) as total_size,
                     MAX(generated_at) as latest_report_date,
@@ -153,7 +151,7 @@ class ReportStorage:
                 (settings.cluster_name,),
             ) as cursor:
                 row = await cursor.fetchone()
-                
+
                 return {
                     "total_reports": row[0] or 0,
                     "total_size_bytes": row[1] or 0,

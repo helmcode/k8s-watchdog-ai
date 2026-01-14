@@ -1,6 +1,3 @@
-"""Main entry point for K8s Watchdog AI - FastAPI Server."""
-
-import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
@@ -53,11 +50,11 @@ class HealthResponse(BaseModel):
 
 def _build_tools_info_message(metadata: dict, generation_time: float) -> str:
     """Build informative message about tools used and data sources.
-    
+
     Args:
         metadata: Tools metadata from agent
         generation_time: Report generation time in seconds
-        
+
     Returns:
         Formatted message string
     """
@@ -68,17 +65,17 @@ def _build_tools_info_message(metadata: dict, generation_time: float) -> str:
         "",
         "📦 *Data Sources:*",
     ]
-    
+
     # Kubernetes tools
     k8s_tools = metadata.get("k8s_tools_used", [])
     if k8s_tools:
         message_parts.append(f"✅ Kubernetes API: {len(k8s_tools)} tool types used")
         message_parts.append(f"   • Tools: {', '.join(sorted(set(k8s_tools)))}")
-    
+
     # Prometheus tools - only report as available if actually used
     prom_tools = metadata.get("prom_tools_used", [])
     prom_failed = metadata.get("prom_tools_failed", [])
-    
+
     if prom_tools and not prom_failed:
         message_parts.append(f"✅ Prometheus: {len(prom_tools)} tool types used")
         message_parts.append(f"   • Tools: {', '.join(sorted(set(prom_tools)))}")
@@ -91,7 +88,7 @@ def _build_tools_info_message(metadata: dict, generation_time: float) -> str:
     elif not prom_tools:
         message_parts.append(f"⚠️ Prometheus: Not available or not used")
         message_parts.append(f"   • Report generated using Kubernetes data only")
-    
+
     # Other failed tools
     other_failed = [f for f in metadata.get("tools_failed", []) if not f["tool"].startswith("prometheus_")]
     if other_failed:
@@ -99,49 +96,49 @@ def _build_tools_info_message(metadata: dict, generation_time: float) -> str:
         message_parts.append("❌ *Other Issues:*")
         for failed in other_failed:
             message_parts.append(f"   • {failed['tool']}: {failed['error'][:60]}")
-    
+
     message_parts.append("")
     message_parts.append(f"📝 Total tool calls: {metadata['total_tool_calls']}")
-    
+
     return "\n".join(message_parts)
 
 
 async def generate_and_send_report() -> dict:
     """Generate report and send to Slack.
-    
+
     Returns:
         Report metadata dict
     """
     global report_in_progress, storage, agent
-    
+
     if report_in_progress:
         logger.warning("report_generation_already_in_progress")
         return {"status": "skipped", "reason": "already_in_progress"}
-    
+
     report_in_progress = True
-    
+
     try:
         logger.info("generating_weekly_report", cluster=settings.cluster_name)
         start_time = datetime.now()
-        
+
         # Generate report
         report_html, metadata = await agent.generate_weekly_report()
-        
+
         generation_time = (datetime.now() - start_time).total_seconds()
-        
+
         logger.info(
             "report_generated",
             generation_time_seconds=generation_time,
             report_size_kb=len(report_html) / 1024,
         )
-        
+
         # Save to storage
         report_id = await storage.save_report(report_html)
         logger.info("report_saved_to_storage", report_id=report_id)
-        
+
         # Build informative message about data sources
         tools_message = _build_tools_info_message(metadata, generation_time)
-        
+
         # Send to Slack
         reporter = SlackReporter()
         await reporter.send_html_report(
@@ -150,14 +147,14 @@ async def generate_and_send_report() -> dict:
             message=tools_message,
         )
         logger.info("report_sent_to_slack")
-        
+
         return {
             "status": "success",
             "report_id": report_id,
             "generation_time_seconds": generation_time,
             "report_size_kb": len(report_html) / 1024,
         }
-        
+
     except Exception as e:
         logger.error(
             "report_generation_failed",
@@ -181,29 +178,29 @@ async def generate_and_send_report() -> dict:
 async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     global storage, agent
-    
+
     logger.info(
         "k8s_watchdog_ai_starting",
         version="0.1.0",
         cluster=settings.cluster_name,
         language=settings.report_language,
     )
-    
+
     # Initialize storage
     storage = ReportStorage()
     await storage.initialize()
     logger.info("storage_initialized")
-    
+
     # Clean up old reports
     deleted = await storage.cleanup_old_reports()
     logger.info("old_reports_cleaned", count=deleted)
-    
+
     # Initialize agent
     agent = K8sWatchdogAgent()
     logger.info("agent_initialized")
-    
+
     yield
-    
+
     logger.info("k8s_watchdog_ai_shutdown")
 
 
@@ -234,10 +231,10 @@ async def trigger_report(background_tasks: BackgroundTasks):
             status_code=409,
             detail="Report generation already in progress"
         )
-    
+
     # Run in background
     background_tasks.add_task(generate_and_send_report)
-    
+
     return ReportResponse(
         status="accepted",
         message="Report generation started in background",
@@ -249,9 +246,9 @@ async def list_reports(limit: int = 10):
     """List recent reports."""
     if not storage:
         raise HTTPException(status_code=503, detail="Storage not initialized")
-    
+
     stats = await storage.get_report_stats()
-    
+
     return {
         "cluster": settings.cluster_name,
         "statistics": stats,
@@ -277,7 +274,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "src.main:app",
         host="0.0.0.0",

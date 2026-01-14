@@ -1,5 +1,3 @@
-"""Kubernetes tools for Claude AI agent."""
-
 import json
 from typing import Any, Optional
 from kubernetes import client, config
@@ -11,7 +9,7 @@ logger = structlog.get_logger()
 
 class KubernetesTools:
     """Kubernetes interaction tools for AI agent."""
-    
+
     def __init__(self):
         """Initialize Kubernetes client."""
         try:
@@ -22,13 +20,13 @@ class KubernetesTools:
             # Fall back to kubeconfig (for local development)
             config.load_kube_config()
             logger.info("loaded_kubeconfig")
-        
+
         self.core_v1 = client.CoreV1Api()
         self.apps_v1 = client.AppsV1Api()
-    
+
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """Get Anthropic tool definitions for Kubernetes operations.
-        
+
         Returns:
             List of tool definitions
         """
@@ -107,14 +105,14 @@ class KubernetesTools:
                 }
             }
         ]
-    
+
     async def execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Execute a Kubernetes tool.
-        
+
         Args:
             tool_name: Name of tool to execute
             arguments: Tool arguments
-            
+
         Returns:
             Tool result as string
         """
@@ -143,7 +141,7 @@ class KubernetesTools:
         except Exception as e:
             logger.error("k8s_tool_error", tool=tool_name, error=str(e))
             return f"Error: {str(e)}"
-    
+
     async def _get_pods(self, namespace: Optional[str], label_selector: Optional[str]) -> str:
         """List pods."""
         try:
@@ -156,7 +154,7 @@ class KubernetesTools:
                 pods = self.core_v1.list_pod_for_all_namespaces(
                     label_selector=label_selector or ""
                 )
-            
+
             result = []
             for pod in pods.items:
                 restarts = sum(cs.restart_count for cs in pod.status.container_statuses or [])
@@ -168,16 +166,16 @@ class KubernetesTools:
                     "node": pod.spec.node_name,
                     "age": str(pod.metadata.creation_timestamp)
                 })
-            
+
             return json.dumps(result, indent=2)
         except ApiException as e:
             return f"Kubernetes API error: {e.reason}"
-    
+
     async def _get_nodes(self) -> str:
         """List nodes."""
         try:
             nodes = self.core_v1.list_node()
-            
+
             result = []
             for node in nodes.items:
                 conditions = {c.type: c.status for c in node.status.conditions}
@@ -188,11 +186,11 @@ class KubernetesTools:
                     "version": node.status.node_info.kubelet_version,
                     "age": str(node.metadata.creation_timestamp)
                 })
-            
+
             return json.dumps(result, indent=2)
         except ApiException as e:
             return f"Kubernetes API error: {e.reason}"
-    
+
     async def _describe_pod(self, name: str, namespace: str) -> str:
         """Describe pod details."""
         try:
@@ -201,7 +199,7 @@ class KubernetesTools:
                 namespace=namespace,
                 field_selector=f"involvedObject.name={name}"
             )
-            
+
             result = {
                 "name": pod.metadata.name,
                 "namespace": pod.metadata.namespace,
@@ -229,11 +227,11 @@ class KubernetesTools:
                     for e in events.items[-10:]  # Last 10 events
                 ]
             }
-            
+
             return json.dumps(result, indent=2)
         except ApiException as e:
             return f"Kubernetes API error: {e.reason}"
-    
+
     async def _get_events(self, namespace: Optional[str], limit: int) -> str:
         """Get recent events."""
         try:
@@ -241,14 +239,14 @@ class KubernetesTools:
                 events = self.core_v1.list_namespaced_event(namespace=namespace)
             else:
                 events = self.core_v1.list_event_for_all_namespaces()
-            
+
             # Sort by timestamp
             sorted_events = sorted(
                 events.items,
                 key=lambda e: e.last_timestamp or e.event_time,
                 reverse=True
             )[:limit]
-            
+
             result = [
                 {
                     "type": e.type,
@@ -260,11 +258,11 @@ class KubernetesTools:
                 }
                 for e in sorted_events
             ]
-            
+
             return json.dumps(result, indent=2)
         except ApiException as e:
             return f"Kubernetes API error: {e.reason}"
-    
+
     async def _get_deployments(self, namespace: Optional[str]) -> str:
         """List deployments."""
         try:
@@ -272,7 +270,7 @@ class KubernetesTools:
                 deployments = self.apps_v1.list_namespaced_deployment(namespace=namespace)
             else:
                 deployments = self.apps_v1.list_deployment_for_all_namespaces()
-            
+
             result = [
                 {
                     "name": d.metadata.name,
@@ -284,7 +282,7 @@ class KubernetesTools:
                 }
                 for d in deployments.items
             ]
-            
+
             return json.dumps(result, indent=2)
         except ApiException as e:
             return f"Kubernetes API error: {e.reason}"
