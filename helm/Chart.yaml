@@ -1,0 +1,15 @@
+apiVersion: v2
+name: k8s-watchdog-ai
+description: A Helm chart for K8s Watchdog AI - Autonomous Kubernetes observability with AI-powered reports
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+maintainers:
+  - name: Helmcode Team
+    email: team@helmcode.com
+keywords:
+  - kubernetes
+  - observability
+  - ai
+  - monitoring
+  - watchdog

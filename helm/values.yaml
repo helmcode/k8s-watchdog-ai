@@ -1,0 +1,114 @@
+# Number of pod replicas (SQLite requires 1 replica)
+replicaCount: 1
+
+# Container image configuration
+image:
+  repository: ghcr.io/helmcode/k8s-watchdog-ai
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Registry credentials (only needed for private repositories)
+# Leave empty for public GitHub Container Registry
+imageCredentials:
+  registry: ""
+  username: ""
+  password: ""
+
+# Vault configuration for secrets
+vault:
+  # Connection configuration
+  connectionRef: vault-connection
+  address: https://vault.helmcode.com
+  skipTLSVerify: false
+
+  # Authentication configuration
+  authRef: vault-auth
+  kubernetesAuthMount: kubernetes
+  kubernetesRole: vault-auth
+  serviceAccountName: k8s-watchdog-ai-sa
+  audiences:
+    - vault
+
+  # Secrets configuration
+  # All secrets are stored in Vault at: helmcode_platform/k8s_watchdog_ai
+  secrets:
+    env:
+      staticSecretRef: k8s-watchdog-ai-vault-secret
+      mount: helmcode_platform
+      path: k8s_watchdog_ai
+      destinationSecretName: k8s-watchdog-ai-env-secret
+      refreshAfter: 30s
+
+# Persistent Volume Claim for SQLite database
+persistence:
+  enabled: true
+  storageClass: ""  # Use default storage class
+  accessMode: ReadWriteOnce
+  size: 5Gi
+  mountPath: /app/data
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+# Ingress configuration (disabled by default)
+ingress:
+  enabled: false
+
+# Resource limits and requests
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: k8s-watchdog-ai-sa
+  annotations: {}
+
+# RBAC configuration for in-cluster Kubernetes access
+rbac:
+  create: true
+  # Cluster-wide read-only access
+  clusterRole:
+    rules:
+      - apiGroups: [""]
+        resources: ["pods", "nodes", "events", "namespaces"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: [""]
+        resources: ["pods/log"]
+        verbs: ["get"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+        verbs: ["get", "list"]
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false  # SQLite needs write access to /app/data
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}

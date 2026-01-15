@@ -1,0 +1,11 @@
+{{- if .Values.vault.connectionRef }}
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultConnection
+metadata:
+  name: {{ .Values.vault.connectionRef }}
+  labels:
+    {{- include "watchdog.labels" . | nindent 4 }}
+spec:
+  address: {{ .Values.vault.address }}
+  skipTLSVerify: {{ .Values.vault.skipTLSVerify }}
+{{- end }}

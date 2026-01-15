@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "watchdog.fullname" . }}-report-trigger
+  labels:
+    {{- include "watchdog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cronjob
+spec:
+  # Run every day at 9:00 AM
+  schedule: "0 9 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "watchdog.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cronjob
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "watchdog.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: cronjob
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: report-trigger
+              image: curlimages/curl:8.5.0
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "Triggering weekly report generation..."
+                  RESPONSE=$(curl -X POST \
+                    -w "\n%{http_code}" \
+                    -s \
+                    --max-time 10 \
+                    http://{{ include "watchdog.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/report)
+                  
+                  HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+                  BODY=$(echo "$RESPONSE" | head -n-1)
+                  
+                  echo "HTTP Status: $HTTP_CODE"
+                  echo "Response: $BODY"
+                  
+                  if [ "$HTTP_CODE" = "202" ]; then
+                    echo "✓ Report generation triggered successfully"
+                    exit 0
+                  else
+                    echo "✗ Failed to trigger report generation"
+                    exit 1
+                  fi
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  cpu: 50m
+                  memory: 32Mi

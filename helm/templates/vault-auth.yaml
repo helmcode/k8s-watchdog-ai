@@ -1,0 +1,21 @@
+{{- if .Values.vault.authRef }}
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultAuth
+metadata:
+  name: {{ .Values.vault.authRef }}
+  labels:
+    {{- include "watchdog.labels" . | nindent 4 }}
+spec:
+  method: kubernetes
+  mount: {{ .Values.vault.kubernetesAuthMount }}
+  kubernetes:
+    role: {{ .Values.vault.kubernetesRole }}
+    serviceAccount: {{ .Values.vault.serviceAccountName | default (include "watchdog.serviceAccountName" .) }}
+    {{- if .Values.vault.audiences }}
+    audiences:
+      {{- range .Values.vault.audiences }}
+      - {{ . }}
+      {{- end }}
+    {{- end }}
+  vaultConnectionRef: {{ .Values.vault.connectionRef }}
+{{- end }}

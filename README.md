@@ -90,27 +90,40 @@ curl http://localhost:8000/health
 docker-compose logs -f
 ```
 
-### Deploy to Kubernetes
+### Deploy to Kubernetes with Helm
 
 ```bash
-# 1. Create namespace
-kubectl create namespace observability
+# 1. Store secrets in Vault (if using Vault)
+vault kv put helmcode_platform/k8s_watchdog_ai \
+  ANTHROPIC_API_KEY="sk-ant-..." \
+  SLACK_WEBHOOK_URL="https://hooks.slack.com/..." \
+  SLACK_BOT_TOKEN="xoxb-..." \
+  SLACK_CHANNEL="C123456789"
 
-# 2. Configure secrets
-kubectl create secret generic k8s-watchdog-secrets \
-  --from-literal=anthropic-api-key=sk-ant-... \
-  --from-literal=slack-webhook-url=https://hooks.slack.com/... \
-  --from-literal=slack-bot-token=xoxb-... \
-  --from-literal=slack-channel=C123456789 \
-  -n observability
+# 2. Install with Helm
+helm install k8s-watchdog-ai ./helm \
+  --namespace watchdog-ai \
+  --create-namespace \
+  --values ./helm/values/prod.yaml
 
-# 3. Deploy the agent
-kubectl apply -f manifests/watchdog-ai/
-
-# 5. Verify deployment
-kubectl get pods -n observability
-kubectl logs -f deployment/k8s-watchdog-ai -n observability
+# 3. Verify deployment
+kubectl get pods -n watchdog-ai
+kubectl logs -f deployment/k8s-watchdog-ai -n watchdog-ai
 ```
+
+For detailed Helm deployment instructions, see [helm/README.md](helm/README.md).
+
+### Deploy with ArgoCD
+
+```bash
+# Apply ArgoCD Application
+kubectl apply -f helm/argocd/application.yaml
+
+# Monitor deployment
+argocd app get k8s-watchdog-ai
+```
+
+For ArgoCD configuration details, see [helm/argocd/README.md](helm/argocd/README.md).
 
 ## ⚙️ Configuration
 
