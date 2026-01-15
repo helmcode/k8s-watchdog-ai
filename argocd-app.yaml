@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: watchdog-ai
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    namespace: watchdog-ai
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://github.com/helmcode/k8s-watchdog-ai.git
+    targetRevision: main
+    path: helm
+    helm:
+      valueFiles:
+        - values/prod.yaml
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
