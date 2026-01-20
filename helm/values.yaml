@@ -115,8 +115,8 @@ affinity: {}
 
 # CronJob configuration for weekly reports
 cronjob:
-  # Schedule in cron format (default: daily at 9:00 AM)
-  schedule: "0 9 * * *"
+  # Schedule in cron format (default: daily at 6:00 AM UTC)
+  schedule: "0 6 * * *"
   # Timeout for the report generation request in seconds
   # Report generation can take several minutes (analyze cluster, generate HTML, create PDF, upload to Slack)
   timeout: 300
