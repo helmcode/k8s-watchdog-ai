@@ -112,3 +112,16 @@ tolerations: []
 
 # Affinity
 affinity: {}
+
+# CronJob configuration for weekly reports
+cronjob:
+  # Schedule in cron format (default: daily at 9:00 AM)
+  schedule: "0 9 * * *"
+  # Timeout for the report generation request in seconds
+  # Report generation can take several minutes (analyze cluster, generate HTML, create PDF, upload to Slack)
+  timeout: 300
+  # Number of successful/failed jobs to keep in history
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # Maximum number of retries before marking the job as failed
+  backoffLimit: 2

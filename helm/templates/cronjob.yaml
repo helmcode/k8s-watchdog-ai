@@ -7,17 +7,17 @@ metadata:
     app.kubernetes.io/component: cronjob
 spec:
   # Run every day at 9:00 AM
-  schedule: "0 9 * * *"
+  schedule: {{ .Values.cronjob.schedule | quote }}
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: {{ .Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronjob.failedJobsHistoryLimit }}
   jobTemplate:
     metadata:
       labels:
         {{- include "watchdog.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: cronjob
     spec:
-      backoffLimit: 2
+      backoffLimit: {{ .Values.cronjob.backoffLimit }}
       template:
         metadata:
           labels:
@@ -36,7 +36,7 @@ spec:
                   RESPONSE=$(curl -X POST \
                     -w "\n%{http_code}" \
                     -s \
-                    --max-time 10 \
+                    --max-time {{ .Values.cronjob.timeout }} \
                     http://{{ include "watchdog.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}/report)
                   
                   HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
