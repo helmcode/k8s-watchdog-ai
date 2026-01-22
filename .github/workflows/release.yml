@@ -23,14 +23,14 @@ jobs:
     permissions:
       contents: write
       packages: write
-      
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract version from __init__.py
         id: version
         run: |
@@ -41,15 +41,15 @@ jobs:
             VERSION=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/__init__.py)
             echo "Extracted version from __init__.py: $VERSION"
           fi
-          
+
           if [ -z "$VERSION" ]; then
             echo "Error: Could not extract version"
             exit 1
           fi
-          
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-      
+
       - name: Check if tag already exists
         id: check_tag
         run: |
@@ -60,11 +60,11 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "Tag v${{ steps.version.outputs.version }} does not exist"
           fi
-      
+
       - name: Set up Docker Buildx
         if: steps.check_tag.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Log in to GitHub Container Registry
         if: steps.check_tag.outputs.exists == 'false'
         uses: docker/login-action@v3
@@ -72,7 +72,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Extract metadata for Docker
         if: steps.check_tag.outputs.exists == 'false'
         id: meta
@@ -84,7 +84,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
             type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
             type=raw,value=latest,enable={{is_default_branch}}
-      
+
       - name: Build and push Docker image
         if: steps.check_tag.outputs.exists == 'false'
         uses: docker/build-push-action@v5
@@ -96,51 +96,51 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
-      
+
       - name: Update Helm values with new version
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
-          # Update helm/values/prod.yaml
-          sed -i "s/tag: \".*\"/tag: \"$VERSION\"/" helm/values/prod.yaml
-          
+
+          # Update helm/values.yaml (default values)
+          sed -i "s/tag: \".*\"/tag: \"$VERSION\"/" helm/values.yaml
+
           # Check if file was modified
-          if git diff --quiet helm/values/prod.yaml; then
-            echo "No changes to helm/values/prod.yaml"
+          if git diff --quiet helm/values.yaml; then
+            echo "No changes to helm/values.yaml"
           else
-            echo "Updated helm/values/prod.yaml with version $VERSION"
+            echo "Updated helm/values.yaml with version $VERSION"
           fi
-      
+
       - name: Commit and push Helm values update
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
-          if git diff --quiet helm/values/prod.yaml; then
+
+          if git diff --quiet helm/values.yaml; then
             echo "No changes to commit"
           else
-            git add helm/values/prod.yaml
+            git add helm/values.yaml
             git commit -m "chore: update helm values to version ${{ steps.version.outputs.version }}"
             git push
           fi
-      
+
       - name: Create Git tag
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
           git push origin "${{ steps.version.outputs.tag }}"
-      
+
       - name: Generate release notes
         if: steps.check_tag.outputs.exists == 'false'
         id: release_notes
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
+
           # Get commits since last tag
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
+
           if [ -n "$LAST_TAG" ]; then
             echo "Generating changelog from $LAST_TAG to HEAD"
             CHANGELOG=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
@@ -148,19 +148,19 @@ jobs:
             echo "No previous tag found, using recent commits"
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges -10)
           fi
-          
+
           # Create release notes
           cat > release_notes.md << EOF
           ## K8s Watchdog AI v$VERSION
-          
+
           ### Changes
           $CHANGELOG
-          
+
           ### Docker Image
           \`\`\`bash
           docker pull ghcr.io/${{ github.repository }}:$VERSION
           \`\`\`
-          
+
           ### Helm Installation
           \`\`\`bash
           helm install k8s-watchdog-ai ./helm \\
@@ -168,7 +168,7 @@ jobs:
             --create-namespace \\
             --values ./helm/values/prod.yaml
           \`\`\`
-          
+
           ### What's Included
           - FastAPI REST API for on-demand report generation
           - Claude AI-powered autonomous cluster analysis
@@ -177,16 +177,16 @@ jobs:
           - PDF report generation with WeasyPrint
           - Slack integration with Files API v2
           - SQLite storage for report history
-          
+
           ### Requirements
           - Kubernetes 1.23+
           - HashiCorp Vault Operator (for secrets management)
           - Anthropic API key
           - Slack Bot Token and Channel ID
           EOF
-          
+
           echo "release_notes_file=release_notes.md" >> $GITHUB_OUTPUT
-      
+
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v1
@@ -198,7 +198,7 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Summary
         if: steps.check_tag.outputs.exists == 'false'
         run: |
@@ -212,7 +212,7 @@ jobs:
           echo "### Available Images" >> $GITHUB_STEP_SUMMARY
           echo "- \`ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`ghcr.io/${{ github.repository }}:latest\`" >> $GITHUB_STEP_SUMMARY
-      
+
       - name: Tag already exists
         if: steps.check_tag.outputs.exists == 'true'
         run: |
