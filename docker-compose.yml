@@ -13,7 +13,8 @@ services:
       - KUBECONFIG_PATH=/root/.kube/config
 
       # Cluster Configuration
-      - CLUSTER_NAME=production
+      - CLUSTER_NAME=local
+      - CLIENT_NAME=prueba
       - NAMESPACES_EXCLUDE=kube-system,kube-public,kube-node-lease
 
       # Report Configuration

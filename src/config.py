@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # Cluster Configuration
     cluster_name: str = "default"
+    client_name: str = "default"
     namespaces_exclude: str = "kube-system,kube-public,kube-node-lease"
 
     # Report Configuration

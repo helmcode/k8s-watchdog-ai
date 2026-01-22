@@ -136,6 +136,7 @@ For ArgoCD configuration details, see [helm/argocd/README.md](helm/argocd/README
 | `SLACK_CHANNEL` | ✅ | - | Channel ID (e.g., C123456789) |
 | `PROMETHEUS_URL` | ❌ | http://prometheus:9090 | Prometheus server URL |
 | `CLUSTER_NAME` | ❌ | default | Cluster identifier |
+| `CLIENT_NAME` | ❌ | default | Client/customer name |
 | `EXCLUDED_NAMESPACES` | ❌ | kube-system,kube-public,... | Namespaces to exclude |
 | `REPORT_LANGUAGE` | ❌ | spanish | Report language (spanish/english) |
 | `SQLITE_PATH` | ❌ | /app/data/reports.db | SQLite database path |

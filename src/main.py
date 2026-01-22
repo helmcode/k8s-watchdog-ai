@@ -4,7 +4,6 @@ from typing import Optional
 
 import structlog
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from src.config import settings
@@ -143,7 +142,7 @@ async def generate_and_send_report() -> dict:
         reporter = SlackReporter()
         await reporter.send_html_report(
             html_content=report_html,
-            filename=f"cluster-health-report-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf",
+            filename=f"k8s-report-{settings.client_name}-{settings.cluster_name}-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf",
             message=tools_message,
         )
         logger.info("report_sent_to_slack")
