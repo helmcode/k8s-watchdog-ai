@@ -112,7 +112,7 @@ async def health_check():
     )
 
 
-@app.post("/report", response_model=ReportResponse)
+@app.post("/report", response_model=ReportResponse, status_code=202)
 async def trigger_report():
     """Trigger report generation by enqueuing a job.
 
