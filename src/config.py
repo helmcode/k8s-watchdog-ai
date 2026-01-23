@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     data_dir: str = "/app/data"
     retention_weeks: int = 2
 
+    # Job Queue Configuration
+    job_poll_interval: int = 5  # Seconds between queue polls
+    job_max_retries: int = 3  # Maximum retry attempts for failed jobs
+
     # Logging Configuration
     log_level: str = "INFO"
 

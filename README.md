@@ -139,6 +139,8 @@ For ArgoCD configuration details, see [helm/argocd/README.md](helm/argocd/README
 | `CLIENT_NAME` | ❌ | default | Client/customer name |
 | `EXCLUDED_NAMESPACES` | ❌ | kube-system,kube-public,... | Namespaces to exclude |
 | `REPORT_LANGUAGE` | ❌ | spanish | Report language (spanish/english) |
+| `JOB_POLL_INTERVAL` | ❌ | 5 | Seconds between queue polls |
+| `JOB_MAX_RETRIES` | ❌ | 3 | Max retry attempts for failed jobs |
 | `SQLITE_PATH` | ❌ | /app/data/reports.db | SQLite database path |
 | `LOG_LEVEL` | ❌ | INFO | Logging level |
 
@@ -148,7 +150,7 @@ See [.env.example](.env.example) for complete list.
 
 1. **FastAPI Server**: Runs continuously, exposing `/report` and `/health` endpoints
 2. **Trigger**: Can be called via HTTP POST or scheduled with Kubernetes CronJob
-3. **AI Investigation**: 
+3. **AI Investigation**:
    - Claude receives a system prompt with available tools
    - Agent autonomously decides what to investigate
    - Makes iterative queries to Kubernetes and Prometheus (if available)

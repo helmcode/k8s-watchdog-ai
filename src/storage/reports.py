@@ -26,6 +26,7 @@ class ReportStorage:
     async def initialize(self) -> None:
         """Initialize database schema."""
         async with aiosqlite.connect(self.db_path) as db:
+            # Reports table
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS reports (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +41,27 @@ class ReportStorage:
             await db.execute("""
                 CREATE INDEX IF NOT EXISTS idx_reports_cluster_generated 
                 ON reports(cluster_name, generated_at DESC)
+            """)
+
+            # Jobs table for queue system
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    payload TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    result TEXT,
+                    error TEXT,
+                    retry_count INTEGER DEFAULT 0
+                )
+            """)
+
+            await db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_jobs_status_created
+                ON jobs(status, created_at ASC)
             """)
 
             await db.commit()
@@ -158,3 +180,125 @@ class ReportStorage:
                     "latest_report_date": row[2],
                     "oldest_report_date": row[3],
                 }
+
+    # Job queue methods
+
+    async def insert_job(self, job_type: str, payload: Optional[str] = None) -> int:
+        """Insert a new job into the queue.
+
+        Args:
+            job_type: Type of job to process (e.g., 'generate_report')
+            payload: Optional JSON payload with job data
+
+        Returns:
+            Job ID
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(
+                """
+                INSERT INTO jobs (type, status, payload)
+                VALUES (?, 'pending', ?)
+                """,
+                (job_type, payload),
+            )
+            await db.commit()
+            job_id = cursor.lastrowid
+
+        logger.info("job_inserted", job_id=job_id, job_type=job_type, source="queue")
+
+        return job_id
+
+    async def get_pending_job(self) -> Optional[dict]:
+        """Get the next pending job from the queue.
+
+        Returns:
+            Job dict or None if no pending jobs exist
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT id, type, status, payload, created_at, retry_count
+                FROM jobs
+                WHERE status = 'pending'
+                ORDER BY created_at ASC
+                LIMIT 1
+                """,
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    return dict(row)
+
+        return None
+
+    async def update_job_status(
+        self,
+        job_id: int,
+        status: str,
+        result: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Update job status and result.
+
+        Args:
+            job_id: Job ID to update
+            status: New status ('processing', 'completed', 'failed')
+            result: Optional result data (JSON string)
+            error: Optional error message if failed
+        """
+        timestamp_field = (
+            "started_at" if status == "processing" else "completed_at"
+        )
+
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                f"""
+                UPDATE jobs
+                SET status = ?, result = ?, error = ?, {timestamp_field} = ?
+                WHERE id = ?
+                """,
+                (status, result, error, datetime.now().isoformat(), job_id),
+            )
+            await db.commit()
+
+        logger.info(
+            "job_status_updated",
+            job_id=job_id,
+            status=status,
+            source="queue",
+        )
+
+    async def increment_job_retry(self, job_id: int) -> int:
+        """Increment retry count for a job.
+
+        Args:
+            job_id: Job ID to increment retry count
+
+        Returns:
+            New retry count
+        """
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute(
+                """
+                UPDATE jobs
+                SET retry_count = retry_count + 1, status = 'pending'
+                WHERE id = ?
+                """,
+                (job_id,),
+            )
+            await db.commit()
+
+            async with db.execute(
+                "SELECT retry_count FROM jobs WHERE id = ?", (job_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                retry_count = row[0] if row else 0
+
+        logger.info(
+            "job_retry_incremented",
+            job_id=job_id,
+            retry_count=retry_count,
+            source="queue",
+        )
+
+        return retry_count
