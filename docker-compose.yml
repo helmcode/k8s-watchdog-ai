@@ -4,13 +4,15 @@ services:
     build: .
     container_name: k8s-watchdog-ai
     environment:
-      # Anthropic Configuration
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+      # Claude Code Configuration
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      - CLAUDE_MAX_TURNS=${CLAUDE_MAX_TURNS:-25}
+      - CLAUDE_TIMEOUT=${CLAUDE_TIMEOUT:-300}
 
       # MCP Configuration
       - PROMETHEUS_URL=${PROMETHEUS_URL:-http://host.docker.internal:9090}
-      - KUBECONFIG_PATH=/root/.kube/config
+      - KUBECONFIG_PATH=/home/watchdog/.kube/config
 
       # Cluster Configuration
       - CLUSTER_NAME=local
@@ -33,7 +35,7 @@ services:
       - LOG_LEVEL=INFO
     volumes:
       - ./data:/app/data
-      - ~/.kube/config:/root/.kube/config:ro
+      - ~/.kube/config:/home/watchdog/.kube/config:ro
     ports:
       - "8000:8000"
     networks:

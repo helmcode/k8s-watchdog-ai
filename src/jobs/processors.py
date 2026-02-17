@@ -184,10 +184,20 @@ def _build_tools_info_message(metadata: dict, generation_time: float) -> str:
         f"🔧 Cluster: `{settings.cluster_name}`",
     ]
 
+    if metadata.get("model"):
+        message_parts.append(f"🧠 Model: `{metadata['model']}`")
+
     if metadata.get("mcp_servers_used"):
         servers = ", ".join(f"`{s}`" for s in metadata["mcp_servers_used"])
         message_parts.append(f"📡 MCP Servers: {servers}")
 
+    if metadata.get("num_turns"):
+        message_parts.append(f"🔄 Agent turns: {metadata['num_turns']}")
+
+    if metadata.get("total_cost_usd"):
+        message_parts.append(f"💰 Cost: ${metadata['total_cost_usd']:.4f}")
+
+    # Legacy fields support
     if metadata.get("tools_used"):
         tools = ", ".join(f"`{t}`" for t in metadata["tools_used"][:5])
         message_parts.append(f"🛠️ Tools used: {tools}")

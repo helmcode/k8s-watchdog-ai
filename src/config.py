@@ -6,9 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # Anthropic Configuration
-    anthropic_api_key: str
+    # Claude Code Configuration
+    claude_code_oauth_token: str
     anthropic_model: str = "claude-sonnet-4-20250514"
+    claude_max_turns: int = 25
+    claude_timeout: int = 300
 
     # Prometheus Configuration
     prometheus_url: str = "http://host.docker.internal:9090"

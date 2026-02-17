@@ -1,11 +1,13 @@
+import asyncio
+import json
+import os
+import sys
+import tempfile
+
 import structlog
-from anthropic import Anthropic
-from typing import Any
 
 from src.config import settings
 from src.orchestrator.prompts import get_system_prompt
-from src.tools.kubernetes import KubernetesTools
-from src.tools.prometheus import PrometheusTools
 
 logger = structlog.get_logger()
 
@@ -13,96 +15,66 @@ logger = structlog.get_logger()
 class K8sWatchdogAgent:
     """Orchestrator for AI-powered Kubernetes cluster analysis.
 
-    This agent uses Claude AI with direct Kubernetes and Prometheus tools
+    This agent uses Claude Code in headless mode with MCP servers
     to analyze cluster health.
     """
 
     def __init__(self) -> None:
         """Initialize the watchdog agent."""
-        self.anthropic = Anthropic(api_key=settings.anthropic_api_key)
-        self.k8s_tools: KubernetesTools | None = None
-        self.prom_tools: PrometheusTools | None = None
-
         logger.info(
             "watchdog_agent_initialized",
             model=settings.anthropic_model,
+            auth_method="claude_code_oauth",
         )
 
-    async def _initialize_tools(self) -> list[dict[str, Any]]:
-        """Initialize Kubernetes and Prometheus tools.
+    def _build_mcp_config(self) -> dict:
+        """Build MCP server configuration for Claude Code.
 
         Returns:
-            List of tool definitions for Claude
+            MCP config dictionary
         """
-        if self.k8s_tools and self.prom_tools:
-            # Already initialized
-            tools = self.k8s_tools.get_tool_definitions()
-            tools.extend(self.prom_tools.get_tool_definitions())
-            return tools
+        mcp_k8s_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "tools", "mcp_kubernetes.py"
+        )
+        mcp_prom_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "tools", "mcp_prometheus.py"
+        )
 
-        # Initialize tools
-        self.k8s_tools = KubernetesTools()
-        self.prom_tools = PrometheusTools(settings.prometheus_url)
-
-        # Get tool definitions
-        tools = self.k8s_tools.get_tool_definitions()
-        tools.extend(self.prom_tools.get_tool_definitions())
-
-        logger.info("tools_initialized", count=len(tools))
-        return tools
-
-    async def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
-        """Execute a tool by routing to appropriate handler.
-
-        Args:
-            tool_name: Name of tool to execute
-            arguments: Tool arguments
-
-        Returns:
-            Tool result as string
-        """
-        if tool_name.startswith("kubectl_"):
-            if not self.k8s_tools:
-                raise RuntimeError("Kubernetes tools not initialized")
-            return await self.k8s_tools.execute_tool(tool_name, arguments)
-        elif tool_name.startswith("prometheus_"):
-            if not self.prom_tools:
-                raise RuntimeError("Prometheus tools not initialized")
-            return await self.prom_tools.execute_tool(tool_name, arguments)
-        else:
-            raise ValueError(f"Unknown tool: {tool_name}")
+        return {
+            "mcpServers": {
+                "kubernetes": {
+                    "type": "stdio",
+                    "command": sys.executable,
+                    "args": [mcp_k8s_path],
+                },
+                "prometheus": {
+                    "type": "stdio",
+                    "command": sys.executable,
+                    "args": [mcp_prom_path],
+                    "env": {
+                        "PROMETHEUS_URL": settings.prometheus_url,
+                    },
+                },
+            }
+        }
 
     async def cleanup(self) -> None:
         """Cleanup resources."""
-        self.k8s_tools = None
-        self.prom_tools = None
         logger.info("tools_cleaned_up")
 
     async def generate_weekly_report(self) -> tuple[str, dict]:
-        """Generate a weekly cluster health report using AI analysis.
+        """Generate a weekly cluster health report using Claude Code headless mode.
 
-        The agent will autonomously:
-        1. Query Kubernetes for cluster state
-        2. Query Prometheus for metrics
-        3. Analyze the data
-        4. Generate an HTML report
+        The agent will:
+        1. Write system prompt and MCP config to temp files
+        2. Invoke claude -p with MCP servers for K8s and Prometheus
+        3. Parse JSON output to extract HTML report
+        4. Return report and metadata
 
         Returns:
-            Tuple of (HTML report as string, metadata dict with tools info)
+            Tuple of (HTML report as string, metadata dict)
         """
         logger.info("starting_weekly_report_generation", cluster=settings.cluster_name)
-
-        # Track tool usage for metadata
-        tools_used = []
-        tools_failed = []
-
-        # Initialize tools
-        tools = await self._initialize_tools()
-
-        if not tools:
-            raise RuntimeError("No tools available")
-
-        logger.info("tools_loaded", count=len(tools))
 
         # Build system prompt
         system_prompt = get_system_prompt(
@@ -110,134 +82,154 @@ class K8sWatchdogAgent:
             cluster_name=settings.cluster_name,
         )
 
-        # Initial message to Claude
-        messages = [
-            {
-                "role": "user",
-                "content": f"""Genera un reporte semanal de salud del cluster {settings.cluster_name}.
+        # Build user prompt
+        user_prompt = f"""Generate a weekly health report for cluster {settings.cluster_name}.
 
-Investiga el estado actual del cluster usando las herramientas disponibles:
-1. Revisa el estado de pods y nodes
-2. Identifica problemas (restarts, errores, OOMKilled)
-3. Analiza métricas de Prometheus para detectar issues de recursos
-4. Compara uso real vs requests/limits
-5. Genera recomendaciones priorizadas
+Investigate the current cluster state using the available tools:
+1. Check pod and node status
+2. Identify problems (restarts, errors, OOMKilled)
+3. Analyze Prometheus metrics for resource issues
+4. Compare actual usage vs requests/limits
+5. Generate prioritized recommendations
 
-Namespaces excluidos del análisis: {', '.join(settings.excluded_namespaces)}
+Excluded namespaces: {', '.join(settings.excluded_namespaces)}
 
-CRÍTICO - FORMATO DE RESPUESTA:
-- Devuelve ÚNICAMENTE el código HTML del reporte
-- NO incluyas ningún texto explicativo, comentario o mensaje antes o después del HTML
-- NO escribas frases como "Veo que...", "Voy a proceder...", "Aquí está..."
-- Tu respuesta debe empezar directamente con <!DOCTYPE html> o <html>
-- Si alguna herramienta no está disponible, simplemente omite esa sección del reporte sin mencionarlo en el HTML
+CRITICAL - RESPONSE FORMAT:
+- Return ONLY the HTML code of the report
+- DO NOT include any explanatory text, comments, or messages before or after the HTML
+- DO NOT write phrases like "I see that...", "I'll proceed...", "Here is..."
+- Your response must start directly with <!DOCTYPE html> or <html>
+- If any tool is unavailable, simply omit that section from the report without mentioning it in the HTML
 """
-            }
-        ]
 
-        # Call Claude with tools
-        logger.info("calling_claude_api", tools_available=len(tools))
+        # Write temp files for MCP config and system prompt
+        mcp_config = self._build_mcp_config()
 
-        response = self.anthropic.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=16384,
-            system=system_prompt,
-            messages=messages,
-            tools=tools,
-        )
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, prefix="mcp_config_"
+        ) as mcp_file:
+            json.dump(mcp_config, mcp_file)
+            mcp_config_path = mcp_file.name
 
-        # Handle tool calls in a loop (Claude agentic behavior)
-        while response.stop_reason == "tool_use":
-            logger.info("claude_requesting_tool_calls", tool_count=len([
-                block for block in response.content if block.type == "tool_use"
-            ]))
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, prefix="system_prompt_"
+        ) as prompt_file:
+            prompt_file.write(system_prompt)
+            prompt_path = prompt_file.name
 
-            # Execute tool calls
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    tool_name = block.name
-                    tool_input = block.input
+        try:
+            # Build claude command
+            cmd = [
+                "claude",
+                "-p", user_prompt,
+                "--output-format", "json",
+                "--model", settings.anthropic_model,
+                "--max-turns", str(settings.claude_max_turns),
+                "--mcp-config", mcp_config_path,
+                "--append-system-prompt-file", prompt_path,
+                "--dangerously-skip-permissions",
+                "--no-session-persistence",
+            ]
 
-                    logger.info("executing_tool", tool=tool_name, input=tool_input)
+            # Set environment with OAuth token
+            env = {**os.environ}
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = settings.claude_code_oauth_token
 
-                    try:
-                        result = await self._execute_tool(tool_name, tool_input)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": str(result),
-                        })
-                        logger.info("tool_execution_successful", tool=tool_name)
-                        tools_used.append(tool_name)
-                    except Exception as e:
-                        logger.error("tool_execution_failed", tool=tool_name, error=str(e))
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": f"Error: {str(e)}",
-                            "is_error": True,
-                        })
-                        tools_failed.append({"tool": tool_name, "error": str(e)})
-                        # Don't add to tools_used when there's an exception
-
-            # Continue conversation with tool results
-            messages.append({
-                "role": "assistant",
-                "content": response.content,
-            })
-            messages.append({
-                "role": "user",
-                "content": tool_results,
-            })
-
-            response = self.anthropic.messages.create(
+            logger.info(
+                "calling_claude_code_headless",
                 model=settings.anthropic_model,
-                max_tokens=16384,
-                system=system_prompt,
-                messages=messages,
-                tools=tools,
+                max_turns=settings.claude_max_turns,
+                timeout=settings.claude_timeout,
             )
 
-        # Extract final report
-        report_html = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                report_html += block.text
+            # Run claude CLI
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
 
-        # Clean up any accidental text before HTML
-        # Remove any text before the first HTML tag
-        if "<!DOCTYPE" in report_html:
-            report_html = report_html[report_html.index("<!DOCTYPE"):]
-        elif "<html" in report_html.lower():
-            html_start = report_html.lower().index("<html")
-            report_html = report_html[html_start:]
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=settings.claude_timeout,
+                )
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.communicate()
+                raise RuntimeError(
+                    f"Claude Code timed out after {settings.claude_timeout}s"
+                )
 
-        # Build metadata
-        # Separate tools by category
-        k8s_tools_used = [t for t in tools_used if t.startswith("kubectl_")]
-        prom_tools_used = [t for t in tools_used if t.startswith("prometheus_")]
-        prom_tools_failed = [f for f in tools_failed if f["tool"].startswith("prometheus_")]
+            stdout_str = stdout.decode("utf-8", errors="replace")
+            stderr_str = stderr.decode("utf-8", errors="replace")
 
-        # Prometheus is available only if it was used successfully
-        prometheus_available = len(prom_tools_used) > 0 and len(prom_tools_failed) == 0
+            if stderr_str:
+                logger.debug("claude_code_stderr", stderr=stderr_str[:500])
 
-        metadata = {
-            "tools_used": list(set(tools_used)),  # Remove duplicates
-            "tools_failed": tools_failed,
-            "tools_available": len(tools),
-            "total_tool_calls": len(tools_used),
-            "k8s_tools_used": list(set(k8s_tools_used)),
-            "prom_tools_used": list(set(prom_tools_used)),
-            "prom_tools_failed": prom_tools_failed,
-            "prometheus_available": prometheus_available,
-        }
+            if process.returncode != 0:
+                logger.error(
+                    "claude_code_failed",
+                    returncode=process.returncode,
+                    stderr=stderr_str[:1000],
+                )
+                raise RuntimeError(
+                    f"Claude Code exited with code {process.returncode}: {stderr_str[:500]}"
+                )
 
-        logger.info(
-            "weekly_report_generated",
-            report_length=len(report_html),
-            stop_reason=response.stop_reason,
-            tools_metadata=metadata,
-        )
+            # Parse JSON output
+            try:
+                output = json.loads(stdout_str)
+            except json.JSONDecodeError as e:
+                logger.error(
+                    "claude_code_invalid_json",
+                    error=str(e),
+                    stdout_preview=stdout_str[:500],
+                )
+                raise RuntimeError(f"Failed to parse Claude Code output: {str(e)}")
 
-        return report_html, metadata
+            # Extract HTML from result
+            report_html = output.get("result", "")
+
+            # Clean up any accidental text before HTML
+            if "<!DOCTYPE" in report_html:
+                report_html = report_html[report_html.index("<!DOCTYPE"):]
+            elif "<html" in report_html.lower():
+                html_start = report_html.lower().index("<html")
+                report_html = report_html[html_start:]
+
+            if not report_html.strip():
+                raise RuntimeError("Claude Code returned empty result")
+
+            # Build metadata
+            metadata = {
+                "model": settings.anthropic_model,
+                "num_turns": output.get("num_turns", 0),
+                "session_id": output.get("session_id", ""),
+                "total_cost_usd": output.get("cost_usd", 0.0),
+                "input_tokens": output.get("usage", {}).get("input_tokens", 0),
+                "output_tokens": output.get("usage", {}).get("output_tokens", 0),
+                "mcp_servers_used": ["kubernetes", "prometheus"],
+                # Legacy fields for backward compatibility
+                "tools_used": [],
+                "tools_failed": [],
+                "prometheus_available": None,  # Cannot be determined with Claude Code headless
+            }
+
+            logger.info(
+                "weekly_report_generated",
+                report_length=len(report_html),
+                num_turns=metadata["num_turns"],
+                cost_usd=metadata["total_cost_usd"],
+            )
+
+            return report_html, metadata
+
+        finally:
+            # Clean up temp files
+            for path in [mcp_config_path, prompt_path]:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass

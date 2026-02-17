@@ -24,23 +24,8 @@ All text, headers, descriptions, and recommendations must be in English.
 
 CONTEXT:
 - Cluster: {cluster_name}
-- You have access to direct Python tools to query Kubernetes and Prometheus
+- You have access to MCP tools for querying Kubernetes and Prometheus. Use these tools to investigate the cluster state. The tools are read-only. If Prometheus tools return connection errors, continue the analysis with Kubernetes data only.
 - Your goal is to generate a weekly cluster health report
-
-AVAILABLE TOOLS:
-1. Kubernetes Tools (read-only):
-   - kubectl_get_pods: List pods across namespaces
-   - kubectl_get_deployments: List deployments
-   - kubectl_get_nodes: List cluster nodes
-   - kubectl_describe_pod: Get detailed pod information
-   - kubectl_get_pod_logs: Fetch pod logs
-   - kubectl_get_events: Recent cluster events
-
-2. Prometheus Tools (optional - may be unavailable):
-   - prometheus_query: Instant PromQL queries
-   - prometheus_query_range: Range queries over time
-   - prometheus_check_pod_memory: Pod memory usage vs limits
-   - prometheus_check_pod_cpu: Pod CPU usage vs limits
 
 ANALYSIS METHODOLOGY:
 1. Start by investigating general state (pods, nodes)
